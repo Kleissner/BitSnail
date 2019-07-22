@@ -35,10 +35,16 @@ func initTorProxies(count int, torBindIP string, torSocketBase int, torExecutabl
 	torSocketPort := torSocketBase
 
 	for n := 0; n < count; n++ {
-		var proxyURL string
 
-		// Spin up a new Tor process if required
-		proxyURL = "127.0.0.1:" + strconv.Itoa(torSocketPort)
+		// find next available port
+		nextPort := findAvailablePort("127.0.0.1", torSocketPort)
+		if nextPort == 0 {
+			break
+		}
+		torSocketPort = nextPort
+
+		// Spin up a new Tor process
+		proxyURL := "127.0.0.1:" + strconv.Itoa(torSocketPort)
 
 		if err := torStart(torBindIP, torSocketPort, torExecutable, torRestart); err != nil {
 			continue
@@ -117,6 +123,7 @@ func torStart(torBindIP string, torSocketPort int, torExecutable string, torRest
 		<-c
 
 		cmd.Process.Kill()
+		os.Exit(0)
 	}(cmd)
 
 	return nil
@@ -139,4 +146,19 @@ func DialTor(network string, tcpAddr *net.TCPAddr) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func findAvailablePort(host string, basePort int) (port int) {
+	for i := 0; i < 200; i++ {
+		conn, _ := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(basePort+i)), time.Millisecond*50)
+		if conn == nil {
+			// No connection possible, assume port is available
+			return basePort + i
+		}
+
+		//fmt.Printf("Note: Port %d is not available, skipping.\n", basePort+i)
+		conn.Close()
+	}
+
+	return 0
 }

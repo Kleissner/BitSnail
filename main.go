@@ -67,7 +67,10 @@ func main() {
 		torExecutable = strings.TrimPrefix(torExecutable, "tor=")
 		torEnable = true
 
-		// future todo: validate if the tor executable exists and is accessible
+		if !fileExists(torExecutable) {
+			fmt.Printf("Tor executable '%s' does not exist\n", torExecutable)
+			return
+		}
 
 	default:
 	}
@@ -85,11 +88,11 @@ func main() {
 	}
 
 	// start!
-	fmt.Printf("Try to create %d concurrent fake peers, target is %s. Initially it will wait for 3 active fake peers and then wait 1 second before creating each new fake peer.\n---------\n", numberPeerFlood, targetPeer.String())
+	fmt.Printf("Try to create %d concurrent fake peers, target is %s.\n", numberPeerFlood, targetPeer.String())
 
 	go slowDownTarget(targetPeer, numberPeerFlood)
 
-	go stats()
+	go stats(targetPeer.String())
 
 	select {}
 }
@@ -111,4 +114,15 @@ func ParseBitcoinTarget(target string) (tcpAddr *net.TCPAddr) {
 	}
 
 	return &net.TCPAddr{IP: ip, Port: portN}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
 }

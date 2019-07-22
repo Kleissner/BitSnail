@@ -115,7 +115,7 @@ func (n *Node) Handshake() error {
 	err = wire.WriteMessage(n.conn, verMsg, n.PVer, n.btcNet)
 
 	if err != nil {
-		log.Print("Write version message error:", err)
+		//log.Print("Write version message error:", err)
 		return err
 	}
 

@@ -51,6 +51,12 @@ func fakePeerConnect(target *net.TCPAddr) {
 	}
 
 	for {
+		// limit to max 10 concurrent attempts to not waste too many resources
+		if activeAttempts-activeFakePeers >= 10 {
+			time.Sleep(time.Millisecond * 1000)
+			continue
+		}
+
 		atomic.AddInt64(&activeAttempts, 1)
 
 		createConnectionPing(node)
@@ -58,7 +64,7 @@ func fakePeerConnect(target *net.TCPAddr) {
 		node.Close()
 		atomic.AddInt64(&activeAttempts, -1)
 
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 400)
 	}
 }
 
@@ -74,7 +80,7 @@ func createConnectionPing(node *Node) {
 
 	if err != nil {
 		//fmt.Printf("Connect error: %v\n", err)
-		// TODO: Create new stats
+		atomic.AddInt64(&connectErrors, 1)
 		return
 	}
 
@@ -113,12 +119,21 @@ func createConnectionPing(node *Node) {
 
 var activeFakePeers, activeAttempts int64
 var handshakeErrors int64
+var connectErrors int64
 
-func stats() {
+func stats(target string) {
 	for {
-		fmt.Printf("Active Fake Peers %d -- Attempts to connect %d -- Currently sleeping %d -- handshake errs %d\n", activeFakePeers, activeAttempts-activeFakePeers, numberPeerFlood-activeAttempts, handshakeErrors)
+		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
+		fmt.Println("Target                  Active Fake Peers    Attempts to Connect    Currently Sleeping    Handshake Errs    Connect Errs")
+		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
 
-		atomic.StoreInt64(&handshakeErrors, 0) //reset
+		fmt.Printf("%-21s               %5d                  %5d                 %5d             %5d           %5d\n", target, activeFakePeers, activeAttempts-activeFakePeers, numberPeerFlood-activeAttempts, handshakeErrors, connectErrors)
+
+		fmt.Printf("\n")
+
+		// reset stats
+		atomic.StoreInt64(&handshakeErrors, 0)
+		atomic.StoreInt64(&connectErrors, 0)
 
 		<-time.After(time.Second * 5)
 	}
