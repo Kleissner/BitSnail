@@ -1,6 +1,7 @@
 # BitSnail
 
-BitSnail - an experimental program to exhaust inbound TCP connections of a Bitcoin client (a Bitcoin full node). This could possibly slow down the entire Bitcoin P2P network if used in a scaled up attack.
+BitSnail - an experimental program to exhaust inbound TCP connections of a Bitcoin client (a Bitcoin full node). This could possibly (in a worst case scenario, unlikely at the current point) slow down the entire Bitcoin P2P network if used in a scaled up attack.
+This tool is just an initial version developed for further testing. At the current stage, it is unlikely to have a major impact due to countermeasures already applied by the major Bitcoin client (Bitcoin Core).
 
 ```
     .----.   ₿   ₿
@@ -67,6 +68,8 @@ taskkill /F /IM tor.exe
 
 You can go to https://bitnodes.earn.com/ and enter the target IP address and click on "Check Node".
 
+Note that is is only a quick check to see whether or not the peer accepts inbound connections at the time. Bitcoin clients are designed to make outgoing connections themselves; so blocking incoming ones of a peer is not completely isolating it.
+
 ## Compile
 
 You need [Go](https://golang.org/dl/) to compile the project. Before compilation you need to download the dependencies:
@@ -75,7 +78,7 @@ You need [Go](https://golang.org/dl/) to compile the project. Before compilation
 go get -u github.com/btcsuite/btcd/wire
 ```
 
-To compile the project (on Windos this will create the `BitSnail.exe`):
+To compile the project (on Windows this will create the `BitSnail.exe`):
 
 ```
 go build
@@ -85,6 +88,21 @@ go build
 
 You can enable Tor as described in the use section to conceal your real IP address. This can be useful to bypass IP blocking.
 The default User Agent is set to `/BitSnail:0.1.0/`. You can change it in `main.go`.
+
+## Countermeasures
+
+There are a couple of countermeasures that can be applied by Bitcoin clients. The most obvious ones are:
+* Limit incoming connections (and peers) per IP addresses
+* When the connection pool is full, evict connections according to certain characteristics (as done by the Bitcoin Core client)
+
+The [Bitcoin Core client](https://github.com/bitcoin/bitcoin) already has a bunch of countermeasures that make it really difficult
+to completely isolate a peer. In the function `AttemptToEvictConnection` it will try evict connections when the connection pool is full. Here is the comment of that function:
+
+> Try to find a connection to evict when the node is full.
+> Extreme care must be taken to avoid opening the node to attacker triggered network partitioning.
+> The strategy used here is to protect a small number of peers for each of several distinct characteristics which are difficult to forge.
+> In order to partition a node the attacker must be simultaneously better at all of them than honest peers.
+
 
 ## Version History
 
