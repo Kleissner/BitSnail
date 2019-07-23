@@ -14,6 +14,10 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+// All Tor proxies will be created at the same local IP. Tor opens up only one port for the socks5 proxy, so port exhaustion on that IP isn't a problem.
+// The port will be automatically determined. Note that the data directory is based on the port, so if multiple Tor proxies would be hosted on different IPs but same port, the data directory would collide.
+const torLocalIP = "127.0.0.2"
+
 var torProxies []string
 var rotate int
 
@@ -36,10 +40,7 @@ func initTorProxies(count int, torBindIP string, torSocketBase int, torExecutabl
 
 	for n := 0; n < count; n++ {
 
-		// Find next available IP. We can use any 127.0.0.1/8 since it's all loopback (at least on Windows).
-		// Using different local IPs prevents local Port exhaustion.
-		nextIP := "127.0.0.2"
-		//todo future
+		nextIP := torLocalIP
 
 		// find next available port
 		nextPort := findAvailablePort(nextIP, torSocketPort)
@@ -167,8 +168,6 @@ func findAvailablePort(host string, basePort int) (port int) {
 
 	return 0
 }
-
-// Todo: Function for getting next available IP
 
 // Todo: Function to check if Tor proxy is still alive. If not remove, terminate it, remove it from the list and trigger launching a new one.
 // This can be likely combined with the above daemon that makes forced reconnects.
