@@ -77,7 +77,7 @@ func main() {
 	}
 
 	if len(targetPeers) == 0 {
-		fmt.Printf("Invalid arguments. First parameter must be IP:Port and second optional is tor=[executable].\n")
+		fmt.Printf("Invalid arguments. First parameter must be IP:Port or input file and second optional is tor=[executable].\n")
 		return
 	}
 

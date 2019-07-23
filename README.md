@@ -34,7 +34,7 @@ BitSnail 1.2.3.4:8333 tor=tor.exe
 BitSnail Targets.txt
 ```
 
-The target file must have one peer (in IP:Port from) per line.
+The target file must have one peer (in IP:Port form) per line.
 
 Example output:
 
@@ -52,6 +52,12 @@ XXX.XXX.XXX.XXX:8333                   12                      7                
 ```
 
 BitSnail will initially wait until 3 active fake peers are created before proceeding to create more. It will wait 1 second before creating each new fake peer. Therefore, it may take 2 minutes until all the connection slots in the remote peer are exhausted and the remote peer effectively inaccessible.
+
+* Active Fake Peers: This is the count of fake peers injected into the remote Bitcoin peer. The more, the better, because it means that more connection slots are occupied by fake peers instead of real ones.
+* Attempts to Connect: The count of current concurrent connection attempts.
+* Currently Sleeping: The count of fake peers not yet injected. They are sleeping and awaiting their turn.
+* Handshake errors: The count of handshake errors in the last 5 seconds. If high and active fake peers is high, this may indicate an impact at the target.
+* Connection errors: The count of connection errors in the last 5 seconds. If high, it could mean that the remote peer banned the source IP.
 
 To use Tor, you must download the expert bundle from the Tor website. The current latest version for Windows 64-bit is: https://dist.torproject.org/torbrowser/8.5.4/tor-win64-0.4.0.5.zip
 
@@ -82,7 +88,7 @@ netsh int ipv4 set dynamicport tcp start=1025 num=64511
 netsh int ipv6 set dynamicport tcp start=1025 num=64511
 ```
 
-To improve `TcpTimedWaitDelay`, merge the following REG file. It sets it to 20 seconds.
+To improve `TcpTimedWaitDelay`, merge the following REG file. It sets it to 30 seconds.
 
 ```
 Windows Registry Editor Version 5.00

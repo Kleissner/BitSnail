@@ -4,15 +4,11 @@ This file is forked from https://github.com/agamble/btc-crawler.
 package main
 
 import (
-	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
-	"path"
 	"syscall"
 	"time"
 
@@ -214,88 +210,6 @@ func (n *Node) Setup() error {
 	return nil
 }
 
-func exists(name string) bool {
-	if _, err := os.Stat(name); err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
-}
-
-func (n *Node) createFiles() {
-	if !exists(n.txnFilePath()) {
-		os.Create(n.txnFilePath())
-	}
-
-	if !exists(n.blockFilePath()) {
-		os.Create(n.blockFilePath())
-	}
-}
-
-func (n *Node) txnFilePath() string {
-	return n.outPath + "-txn"
-}
-
-func (n *Node) blockFilePath() string {
-	return n.outPath + "-block"
-}
-
-// InvWriter starts the goroutine which manages disk writing for this node.
-// Should only be called as its own goroutine.
-func (n *Node) InvWriter(dataDirName string, node <-chan *StampedInv) {
-	n.outPath = path.Join(dataDirName, n.String())
-
-	n.createFiles()
-
-	txnFile, err := os.OpenFile(n.txnFilePath(), os.O_WRONLY|os.O_APPEND, 0666)
-	defer txnFile.Close()
-
-	if err != nil {
-		fmt.Printf("Error opening file '%s': %v\n", n.txnFilePath(), err)
-		return
-		//panic(err)
-	}
-
-	blkFile, err := os.OpenFile(n.blockFilePath(), os.O_WRONLY|os.O_APPEND, 0666)
-	defer blkFile.Close()
-
-	if err != nil {
-		panic(err)
-	}
-
-	txnEnc := gob.NewEncoder(txnFile)
-	blkEnc := gob.NewEncoder(blkFile)
-	stampedSightingHolder := new(StampedSighting)
-
-	for stampedInvs := range node {
-		n.WriteInv(txnEnc, blkEnc, stampedSightingHolder, stampedInvs)
-	}
-}
-
-// WriteInv writes a specific inv message to disk.
-func (n *Node) WriteInv(txnEnc *gob.Encoder, blkEnc *gob.Encoder, stampedSightingHolder *StampedSighting, stampedInvs *StampedInv) {
-	if stampedSightingHolder == nil {
-		stampedSightingHolder = new(StampedSighting)
-	}
-
-	stampedSightingHolder.Timestamp = stampedInvs.Timestamp
-
-	for _, invVect := range stampedInvs.InvVects {
-		stampedSightingHolder.InvVect = invVect
-		var err error
-		if n.ListenTxs && invVect.Type == wire.InvTypeTx {
-			err = txnEnc.Encode(stampedSightingHolder)
-		} else if n.ListenBlks && invVect.Type == wire.InvTypeBlock {
-			err = blkEnc.Encode(stampedSightingHolder)
-		}
-
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
 func (n *Node) Ping() {
 	nonce, _ := wire.RandomUint64()
 	n.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -305,15 +219,7 @@ func (n *Node) Ping() {
 
 // Watch begins listening to the node. Requires an initial connect beforehand.
 // Should be run as its own Goroutine.
-/*
-func (n *Node) Watch(progressC chan<- *watchProgress, stopC chan<- string, addrC chan<- []*wire.NetAddress, dataDirName string) {
-
-	resultC := make(chan *StampedInv, 1)
-
-	invWriterC := make(chan *StampedInv, 1)
-	defer close(invWriterC)
-
-	go n.InvWriter(dataDirName, invWriterC)
+func (n *Node) Watch( /*progressC chan<- *watchProgress,*/ stopC chan<- string, addrC chan<- []*wire.NetAddress) {
 
 	if err := n.Setup(); err != nil {
 		stopC <- n.String()
@@ -327,11 +233,10 @@ func (n *Node) Watch(progressC chan<- *watchProgress, stopC chan<- string, addrC
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
 
-	go n.Inv(resultC, addrC)
+	go n.Addr(addrC)
 
-	countProcessed := 0
+	//countProcessed := 0
 
-	nilCount := 0
 	for {
 		select {
 		case <-pingTicker.C:
@@ -339,52 +244,25 @@ func (n *Node) Watch(progressC chan<- *watchProgress, stopC chan<- string, addrC
 		case <-n.doneC:
 			return
 		case <-ticker.C:
-			progressC <- &watchProgress{address: n.String(), uniqueInvSeen: countProcessed}
-		case stampedInv := <-resultC:
-			if stampedInv == nil {
-				if nilCount > 5 {
-					stopC <- n.String()
-					return
-				}
-				nilCount++
-			} else {
-				nilCount = 0
-			}
-
-			go n.Inv(resultC, addrC)
-
-			if stampedInv != nil {
-				invWriterC <- stampedInv
-				countProcessed += len(stampedInv.InvVects)
-			}
+			//progressC <- &watchProgress{address: n.String(), uniqueInvSeen: countProcessed}
 		}
 	}
-}*/
+}
 
-// Inv receives and accordingly processes a received inv message.
+// Addr receives an unsolicited addr message upstream to the dispatcher
 // Send unsolicited addr messages upstream to the dispatcher
-func (n *Node) Inv(invC chan<- *StampedInv, addrC chan<- []*wire.NetAddress) {
-	res, err := n.ReceiveMessage([]string{"inv", "addr"})
-	now := time.Now()
+func (n *Node) Addr(addrC chan<- []*wire.NetAddress) {
+	res, err := n.ReceiveMessage([]string{"addr"})
 
 	if err != nil {
-		invC <- nil
 		return
 	}
 
 	switch res := res.(type) {
-	case *wire.MsgInv:
-		sighting := new(StampedInv)
-		sighting.Timestamp = now
-		sighting.InvVects = res.InvList[:]
-		invC <- sighting
 	case *wire.MsgAddr:
 		addrC <- res.AddrList
-		invC <- nil
 	default:
-		invC <- nil
 	}
-
 }
 
 // StopWatching, called synchronously
