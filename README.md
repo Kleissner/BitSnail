@@ -17,6 +17,7 @@ Features:
 * The first Bitcoin peer ddos software!
 * Modify it to to test a variety of attacks.
 * Supports Tor as proxy
+* DDoS multiple clients at once
 
 This tool was developed just with 1 day of work and is not optimized. The result could be probably far better by tweaking the amount of connections, timeouts and an automated increase/decrease of connection attempts. BitSnail does not detect if the source IP was blocked.
 
@@ -25,33 +26,29 @@ Disclaimer: This tool may only be used for security research purposes. Use it on
 ## Use
 
 ```
-BitSnail [IP:Port] [optional flag tor=Executable of Tor]
+BitSnail [IP:Port or input-file] [optional flag tor=Executable of Tor]
 
 Examples:
 BitSnail 1.2.3.4:8333
 BitSnail 1.2.3.4:8333 tor=tor.exe
+BitSnail Targets.txt
 ```
+
+The target file must have one peer (in IP:Port from) per line.
 
 Example output:
 
 ```
-Wait 10 seconds for 4 Tor proxy instances to connect
-Try to create 125 concurrent fake peers, target is X.X.X.X:8333. Initially it will wait for 3 active fake peers and then wait 1 second before creating each new fake peer.
----------
-Active Fake Peers 0 -- Attempts to connect 0 -- Currently sleeping 125 -- handshake errs 0
-Active Fake Peers 3 -- Attempts to connect 2 -- Currently sleeping 120 -- handshake errs 0
-Active Fake Peers 4 -- Attempts to connect 3 -- Currently sleeping 118 -- handshake errs 0
-Active Fake Peers 10 -- Attempts to connect 2 -- Currently sleeping 113 -- handshake errs 0
-Active Fake Peers 12 -- Attempts to connect 5 -- Currently sleeping 108 -- handshake errs 0
-Active Fake Peers 15 -- Attempts to connect 7 -- Currently sleeping 103 -- handshake errs 0
-Active Fake Peers 18 -- Attempts to connect 9 -- Currently sleeping 98 -- handshake errs 0
-Active Fake Peers 23 -- Attempts to connect 9 -- Currently sleeping 93 -- handshake errs 0
-Active Fake Peers 27 -- Attempts to connect 10 -- Currently sleeping 88 -- handshake errs 0
-Active Fake Peers 28 -- Attempts to connect 13 -- Currently sleeping 84 -- handshake errs 0
-Active Fake Peers 31 -- Attempts to connect 16 -- Currently sleeping 78 -- handshake errs 0
-Active Fake Peers 28 -- Attempts to connect 24 -- Currently sleeping 73 -- handshake errs 0
-Active Fake Peers 34 -- Attempts to connect 23 -- Currently sleeping 68 -- handshake errs 0
-...
+------------------------------------------------------------------------------------------------------------------------
+Target                  Active Fake Peers    Attempts to Connect    Currently Sleeping    Handshake Errs    Connect Errs
+------------------------------------------------------------------------------------------------------------------------
+XX.XXX.XXX.XXX:8333                    68                      2                    55                 0               0
+XX.XXX.XX.XXX:8333                     67                      3                    55                 0               0
+XX.XXX.XXX.XX:8333                     38                     10                    77                44               0
+XX.XX.XXX.XX:8333                      48                     10                    67                36               0
+XXX.XX.XXX.XXX:8333                    69                      0                    56                 0               0
+XXX.XXX.XX.XXX:8333                    69                      0                    56                 0               0
+XXX.XXX.XXX.XXX:8333                   12                      7                   106                50               0
 ```
 
 BitSnail will initially wait until 3 active fake peers are created before proceeding to create more. It will wait 1 second before creating each new fake peer. Therefore, it may take 2 minutes until all the connection slots in the remote peer are exhausted and the remote peer effectively inaccessible.
@@ -64,11 +61,35 @@ If you enable Tor and close the application the Tor processes may still run in t
 taskkill /F /IM tor.exe
 ```
 
-## How-to check if the attack is successful
+### How-to check if the attack is successful
 
 You can go to https://bitnodes.earn.com/ and enter the target IP address and click on "Check Node".
 
 Note that is is only a quick check to see whether or not the peer accepts inbound connections at the time. Bitcoin clients are designed to make outgoing connections themselves; so blocking incoming ones of a peer is not completely isolating it.
+
+### Preventing Local TCP Connection Exhaustion
+
+BitSnail opens up many connections to the remote peer. There is the risk of exhausting local available TCP ports.
+
+In Windows there are 2 settings that affect the TCP performance for opening many connections:
+1. `MaxUserPort` number, which limits outbound connections
+2. `TcpTimedWaitDelay`, which defines how long ports (connections) are remaining in the state `TIME_WAIT`
+
+To set MaxUserPort to a higher number, run these commands:
+
+```
+netsh int ipv4 set dynamicport tcp start=1025 num=64511
+netsh int ipv6 set dynamicport tcp start=1025 num=64511
+```
+
+To improve `TcpTimedWaitDelay`, merge the following REG file. It sets it to 20 seconds.
+
+```
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters]
+"TcpTimedWaitDelay"=dword:0000001E
+```
 
 ## Compile
 
@@ -87,7 +108,7 @@ go build
 ## Privacy
 
 You can enable Tor as described in the use section to conceal your real IP address. This can be useful to bypass IP blocking.
-The default User Agent is set to `/BitSnail:0.1.0/`. You can change it in `main.go`.
+The default User Agent is set to `/BitSnail:0.2.0/`. You can change it in `main.go`.
 
 ## Countermeasures
 
@@ -103,10 +124,15 @@ to completely isolate a peer. In the function `AttemptToEvictConnection` it will
 > The strategy used here is to protect a small number of peers for each of several distinct characteristics which are difficult to forge.
 > In order to partition a node the attacker must be simultaneously better at all of them than honest peers.
 
+Even though it's very unlikely to completely isolate a peer using the current version of BitSnail (in parts because of countermeasures), it is powerful enough to at least temporarily block inbound connections and cause disruption.
 
 ## Version History
 
 ```
+2   7/23/2019
+
+Added support for ddosing multiple peers at once. Improved output.
+
 1   7/22/2019
 
 Initial version.

