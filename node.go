@@ -510,6 +510,7 @@ func NewNode(tcpAddr *net.TCPAddr) *Node {
 
 // ConnectTor Attempt to form a TCP connection to the node.
 func (n *Node) ConnectTor() (net.Conn, error) {
+	// Todo: Support bind to specific local IP here. This can prevent local port exhaustion.
 
 	conn, err := DialTor("tcp", n.TcpAddr)
 	if err != nil {
@@ -520,8 +521,9 @@ func (n *Node) ConnectTor() (net.Conn, error) {
 	return conn, nil
 }
 
-// Attempt to form a TCP connection to the node.
+// Connect2 connects to the node using the regular internet connection.
 func (n *Node) Connect2() (net.Conn, error) {
+	// Todo: Support bind to specific local IP here. This can prevent local port exhaustion.
 
 	conn, err := net.DialTimeout("tcp", n.TcpAddr.String(), 30*time.Second)
 	if err != nil {

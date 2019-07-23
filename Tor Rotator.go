@@ -36,17 +36,22 @@ func initTorProxies(count int, torBindIP string, torSocketBase int, torExecutabl
 
 	for n := 0; n < count; n++ {
 
+		// Find next available IP. We can use any 127.0.0.1/8 since it's all loopback (at least on Windows).
+		// Using different local IPs prevents local Port exhaustion.
+		nextIP := "127.0.0.2"
+		//todo future
+
 		// find next available port
-		nextPort := findAvailablePort("127.0.0.1", torSocketPort)
+		nextPort := findAvailablePort(nextIP, torSocketPort)
 		if nextPort == 0 {
 			break
 		}
 		torSocketPort = nextPort
 
 		// Spin up a new Tor process
-		proxyURL := "127.0.0.1:" + strconv.Itoa(torSocketPort)
+		proxyURL := nextIP + ":" + strconv.Itoa(torSocketPort)
 
-		if err := torStart(torBindIP, torSocketPort, torExecutable, torRestart); err != nil {
+		if err := torStart(torBindIP, nextIP, torSocketPort, torExecutable, torRestart); err != nil {
 			continue
 		}
 
@@ -61,7 +66,7 @@ func initTorProxies(count int, torBindIP string, torSocketBase int, torExecutabl
 }
 
 // torStart starts a new tor process
-func torStart(torBindIP string, torSocketPort int, torExecutable string, torRestart int) (err error) {
+func torStart(torBindIP, torSocketIP string, torSocketPort int, torExecutable string, torRestart int) (err error) {
 	// see https://www.torproject.org/docs/tor-manual-dev.html.en for all command line options
 	//    tor.exe -SocksPort [Port] -DataDirectory [Tor Data Directory] -ExitRelay 0 -OutboundBindAddress [IP]
 
@@ -73,9 +78,9 @@ func torStart(torBindIP string, torSocketPort int, torExecutable string, torRest
 	// use code from bucket launcher
 	var cmd *exec.Cmd
 	if torBindIP != "" {
-		cmd = exec.Command(torExecutable, "-DataDirectory", dataDirectory, "-SocksPort", strconv.Itoa(torSocketPort), "-ExitRelay", "0", "-OutboundBindAddress", torBindIP, "-HTTPTunnelPort", "0")
+		cmd = exec.Command(torExecutable, "-DataDirectory", dataDirectory, "-SocksPort", torSocketIP+":"+strconv.Itoa(torSocketPort), "-ExitRelay", "0", "-OutboundBindAddress", torBindIP, "-HTTPTunnelPort", "0")
 	} else {
-		cmd = exec.Command(torExecutable, "-DataDirectory", dataDirectory, "-SocksPort", strconv.Itoa(torSocketPort), "-ExitRelay", "0", "-HTTPTunnelPort", "0")
+		cmd = exec.Command(torExecutable, "-DataDirectory", dataDirectory, "-SocksPort", torSocketIP+":"+strconv.Itoa(torSocketPort), "-ExitRelay", "0", "-HTTPTunnelPort", "0")
 		//fmt.Printf("%s %s %s %s %s %s %s %s %s\n", torExecutable, "-DataDirectory", dataDirectory, "-SocksPort", strconv.Itoa(torSocketPort), "-ExitRelay", "0", "-HTTPTunnelPort", "0")
 	}
 	cmd.Dir = filepath.Dir(torExecutable)
@@ -86,7 +91,7 @@ func torStart(torBindIP string, torSocketPort int, torExecutable string, torRest
 		return err
 	}
 
-	fmt.Printf("torStart: Successfully launched '%s' at port %d\n", torExecutable, torSocketPort)
+	fmt.Printf("torStart: Successfully launched '%s' at %s:%d\n", torExecutable, torSocketIP, torSocketPort)
 
 	// start the watch-dog for auto-restart
 	go func(cmd *exec.Cmd, torBindIP string, torSocketPort int, torExecutable string, torRestart int) {
@@ -101,7 +106,7 @@ func torStart(torBindIP string, torSocketPort int, torExecutable string, torRest
 
 		// restart after a short waiting time
 		time.Sleep(4 * time.Second)
-		torStart(torBindIP, torSocketPort, torExecutable, torRestart)
+		torStart(torBindIP, torSocketIP, torSocketPort, torExecutable, torRestart)
 
 		return
 	}(cmd, torBindIP, torSocketPort, torExecutable, torRestart)
@@ -162,3 +167,8 @@ func findAvailablePort(host string, basePort int) (port int) {
 
 	return 0
 }
+
+// Todo: Function for getting next available IP
+
+// Todo: Function to check if Tor proxy is still alive. If not remove, terminate it, remove it from the list and trigger launching a new one.
+// This can be likely combined with the above daemon that makes forced reconnects.
