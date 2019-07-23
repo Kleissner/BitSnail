@@ -137,7 +137,7 @@ func torStart(torBindIP, torSocketIP string, torSocketPort int, torExecutable st
 
 // DialTor will dial an IP address through Tor.
 func DialTor(network string, tcpAddr *net.TCPAddr) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("tcp", torGetProxy(), nil, proxy.Direct)
+	dialer, err := proxy.SOCKS5("tcp", torGetProxy(), nil, DialerIPRotate)
 
 	if err != nil {
 		//log.Println("Tor seems to be down...", err)

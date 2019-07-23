@@ -38,7 +38,7 @@ const numberPeerFlood = 125 // DEFAULT_MAX_PEER_CONNECTIONS
 
 // The User Agent is sent in the initial handshake to the target Bitcoin peer.
 //const clientUserAgent = "/Satoshi:0.18.0/"
-const clientUserAgent = "/BitSnail:0.2.0/"
+const clientUserAgent = "/BitSnail:0.2.1/"
 
 var torEnable = false
 
