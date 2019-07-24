@@ -146,7 +146,7 @@ func (n *Node) pong(ping *wire.MsgPing) {
 		err := wire.WriteMessage(n.conn, pongMsg, n.PVer, n.btcNet)
 
 		if err != nil {
-			log.Println("Failed to send pong", err)
+			//log.Println("Failed to send pong", err)
 			continue
 		}
 
@@ -391,6 +391,7 @@ func (n *Node) ConnectTor() (net.Conn, error) {
 
 	conn, err := DialTor("tcp", n.TcpAddr)
 	if err != nil {
+		//fmt.Printf("Tor connect error: %v\n", err)
 		return nil, err
 	}
 	n.conn = conn
@@ -404,6 +405,20 @@ func (n *Node) Connect2() (net.Conn, error) {
 
 	conn, err := net.DialTimeout("tcp", n.TcpAddr.String(), 30*time.Second)
 	if err != nil {
+		return nil, err
+	}
+	n.conn = conn
+
+	return conn, nil
+}
+
+// ConnectProxy attempts to connect to the node via a proxy.
+func (n *Node) ConnectProxy() (net.Conn, error) {
+
+	p := ProxyGet()
+	conn, err := p.Dial("tcp", n.TcpAddr)
+	if err != nil {
+		//fmt.Printf("Proxy connect error: %v\n", err)
 		return nil, err
 	}
 	n.conn = conn

@@ -98,9 +98,9 @@ func (t *Target) fakePeerConnect() {
 func (t *Target) createConnectionPing(node *Node) {
 	var err error
 
-	if torEnable {
+	if proxyEnable {
 		// Use proxy
-		_, err = node.ConnectTor()
+		_, err = node.ConnectProxy()
 	} else {
 		_, err = node.Connect2()
 	}
@@ -148,6 +148,8 @@ func stats() {
 	for {
 		<-time.After(time.Second * 5)
 
+		var sumCount, sumFakePeers, sumAttempts, sumSleeping, sumHandshakeErr, sumConnectErr int64
+
 		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
 		fmt.Println("Target                  Active Fake Peers    Attempts to Connect    Currently Sleeping    Handshake Errs    Connect Errs")
 		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
@@ -155,10 +157,26 @@ func stats() {
 		for _, t := range targets {
 			fmt.Printf("%-21s               %5d                  %5d                 %5d             %5d           %5d\n", t.addressA, t.activeFakePeers, t.activeAttempts-t.activeFakePeers, t.numberPeerFlood-t.activeAttempts, t.handshakeErrors, t.connectErrors)
 
+			sumCount++
+			sumFakePeers += t.activeFakePeers
+			sumAttempts += t.activeAttempts - t.activeFakePeers
+			sumSleeping += t.numberPeerFlood - t.activeAttempts
+			sumHandshakeErr += t.handshakeErrors
+			sumConnectErr += t.connectErrors
+
 			// reset stats
 			atomic.StoreInt64(&t.handshakeErrors, 0)
 			atomic.StoreInt64(&t.connectErrors, 0)
 		}
+
+		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
+
+		// output summary
+		fmt.Printf("All Targets %-5d                   %5d                  %5d                 %5d             %5d           %5d\n", sumCount, sumFakePeers, sumAttempts, sumSleeping, sumHandshakeErr, sumConnectErr)
+
+		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
+		fmt.Println("Target                  Active Fake Peers    Attempts to Connect    Currently Sleeping    Handshake Errs    Connect Errs")
+		fmt.Println("------------------------------------------------------------------------------------------------------------------------")
 
 		fmt.Printf("\n")
 	}

@@ -59,6 +59,7 @@ func initTorProxies(count int, torBindIP string, torSocketBase int, torExecutabl
 		torSocketPort++
 
 		torProxies = append(torProxies, proxyURL)
+		ProxyAdd(proxyURL, true, GetDialerBindLocalIP(nil))
 	}
 
 	if len(torProxies) < count {
@@ -86,6 +87,8 @@ func torStart(torBindIP, torSocketIP string, torSocketPort int, torExecutable st
 	}
 	cmd.Dir = filepath.Dir(torExecutable)
 	cmd.Path = filepath.Base(torExecutable)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("torStart: cmd.Start of '%s' failed: %v\n", torExecutable, err)
@@ -137,7 +140,7 @@ func torStart(torBindIP, torSocketIP string, torSocketPort int, torExecutable st
 
 // DialTor will dial an IP address through Tor.
 func DialTor(network string, tcpAddr *net.TCPAddr) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("tcp", torGetProxy(), nil, DialerIPRotate)
+	dialer, err := proxy.SOCKS5("tcp", torGetProxy(), nil, GetDialerBindLocalIP(nil))
 
 	if err != nil {
 		//log.Println("Tor seems to be down...", err)
